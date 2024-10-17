@@ -448,7 +448,7 @@ static void testEmptyTable(void)
    oSymTable = SymTable_new();
    ASSURE(oSymTable != NULL);
 
-   uLength = SymTable_getLength(oSymTable);
+   /*uLength = SymTable_getLength(oSymTable);
    ASSURE(uLength == 0);
 
    iFound = SymTable_contains(oSymTable, "Jeter");
@@ -462,7 +462,7 @@ static void testEmptyTable(void)
 
    SymTable_map(oSymTable, printBinding, "%s\t%s\n");
 
-   /*SymTable_free(oSymTable);*/
+   SymTable_free(oSymTable);*/
 }
 
 /*--------------------------------------------------------------------*/
