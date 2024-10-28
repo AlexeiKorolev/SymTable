@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include "symtable.h"
 #include <assert.h>
@@ -39,10 +40,10 @@ static size_t SymTable_hash(const char *pcKey, size_t uBucketCount)
 
 
 SymTable_T SymTable_new(void) {
-   SymTable_T newTable = malloc(sizeof(struct SymTable));
+   SymTable_T newTable = calloc(1, sizeof(struct SymTable));
    if (newTable == NULL) {return NULL;}
 
-   newTable->table = malloc(sizeof(struct Node) * SIZES[0]);
+   newTable->table = calloc(SIZES[0], sizeof(Node_T));
 
    if (newTable->table == NULL) {
       free (newTable);
@@ -55,7 +56,7 @@ SymTable_T SymTable_new(void) {
 }
 
 Node_T Node_new(const char *key, const void *value) {
-   Node_T newNode = malloc(sizeof(struct SymTable));
+   Node_T newNode = calloc(1, sizeof(struct Node));
 
    assert(key != NULL);
    
@@ -82,9 +83,10 @@ void free_LL(Node_T node) {
 
 void SymTable_free(SymTable_T oSymTable) {
    size_t i = 0;
+   const size_t size = SIZES[oSymTable->curArrSize];
    assert(oSymTable != NULL);
 
-   for (i = 0; i < oSymTable->curArrSize; i++){
+   for (i = 0; i < size; i++){
       free_LL(oSymTable->table[i]);
    }
 
@@ -123,7 +125,7 @@ int expandTable(SymTable_T oSymTable) {
    
    assert(oSymTable != NULL);
 
-   if (oSymTable->size >= SIZES[6]) {return 0;}
+   if (oSymTable->size >= SIZES[6]) {return 1;}
 
    if (oSymTable->size >= SIZES[oSymTable->curArrSize]) {
       size_t original_size = SIZES[oSymTable->curArrSize];
@@ -131,7 +133,7 @@ int expandTable(SymTable_T oSymTable) {
       size_t index = 0;
       /*expand*/
       
-      newTable = malloc(sizeof(struct Node) * new_size);
+      newTable = calloc(new_size, sizeof(Node_T));
 
       if (newTable == NULL) {return 0;}
 
@@ -142,16 +144,17 @@ int expandTable(SymTable_T oSymTable) {
          /* loop through the separate chain */
          while (curNode != NULL) {
             size_t newIndex = SymTable_hash(curNode->key, new_size);
-            Node_T newCurNode = newTable[newIndex];
-
-            if (newCurNode == NULL) {newTable[newIndex] = curNode;}
+            Node_T alreadyPresentNode = newTable[newIndex];
+            Node_T curNodeCopy = Node_new(curNode->key, curNode->value);
             
-            /* add to the end */
-            while (newCurNode->next != NULL) {
-               newCurNode = newCurNode->next;
-            }
+            newTable[newIndex] = curNodeCopy;
 
-            newCurNode->next = newCurNode;
+            curNodeCopy->next = alreadyPresentNode;
+
+            curNodeCopy = curNode->next;
+            free(curNode->key);
+            free(curNode);
+            curNode = curNodeCopy;
          }
       }
 
@@ -161,33 +164,48 @@ int expandTable(SymTable_T oSymTable) {
       return 1;
       
    } else {
-      return 0;
+      return 1;
    }
 }
 
 int SymTable_put(SymTable_T oSymTable,
                  const char *pcKey, const void *pvValue) {
-   Node_T newNode = Node_new(pcKey, pvValue);
+   Node_T newNode = NULL;
    size_t index;
+   Node_T curNode;
+   Node_T prevNode = NULL;
    
    assert(oSymTable != NULL);
    assert(pcKey != NULL);
-   
+
+   newNode = Node_new(pcKey, pvValue);
    if (newNode == NULL) {return 0;}
 
    index = SymTable_hash(pcKey, SIZES[oSymTable->curArrSize]);
 
-   Node_T curNode = oSymTable->table[index];
+   curNode = oSymTable->table[index];
 
-   if (curNode == NULL) {oSymTable->table[index] = newNode;}
-   
-   while(curNode != NULL) {curNode = curNode->next;}
+   if (curNode == NULL) {
+      oSymTable->table[index] = newNode;
+      goto finishingTouches;
+   }
 
-   curNode->next = newNode;
+   do {
+      if (strcmp(pcKey, curNode->key) == 0) {
+         free(newNode->key);
+         free(newNode);
+         return 0;
+      }
+      prevNode = curNode;
+      curNode = curNode->next;
+   } while(curNode != NULL);
 
+   prevNode->next = newNode;
+
+  finishingTouches:
    oSymTable->size++;
-
    return expandTable(oSymTable);
+   
 }
 
 Node_T getNodeFromKey(SymTable_T oSymTable, const char *key) {
@@ -200,6 +218,7 @@ Node_T getNodeFromKey(SymTable_T oSymTable, const char *key) {
       if (strcmp(key, curNode->key) == 0) {
          return curNode;
       }
+      curNode = curNode->next;
    }
 
    return NULL;
@@ -208,10 +227,11 @@ Node_T getNodeFromKey(SymTable_T oSymTable, const char *key) {
 void *SymTable_replace(SymTable_T oSymTable,
                        const char *pcKey, const void *pvValue) {
    Node_T foundNode = getNodeFromKey(oSymTable, pcKey);
+   void* oldValue;
 
    if (foundNode == NULL) {return NULL;}
 
-   void *oldValue = foundNode->value;
+   oldValue = (void *)foundNode->value;
    foundNode->value = (void *)pvValue;
    return oldValue;
 }
@@ -220,6 +240,7 @@ int SymTable_contains(SymTable_T oSymTable, const char *pcKey) {
    return getNodeFromKey(oSymTable, pcKey) != NULL;
 }
 
+
 void *SymTable_get(SymTable_T oSymTable, const char *pcKey) {
    Node_T foundNode = getNodeFromKey(oSymTable, pcKey);
 
@@ -227,6 +248,7 @@ void *SymTable_get(SymTable_T oSymTable, const char *pcKey) {
 
    return (void *)foundNode->value;
 }
+
 
 void *SymTable_remove(SymTable_T oSymTable, const char *pcKey) {
    size_t index = SymTable_hash(pcKey, SIZES[oSymTable->curArrSize]);
@@ -271,6 +293,7 @@ void SymTable_map(SymTable_T oSymTable,
       
       while (curNode != NULL) {
          pfApply(curNode->key, curNode->value, (void *)pvExtra);
+         curNode = curNode->next;
       }
    }
    
